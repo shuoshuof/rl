@@ -3,7 +3,6 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 from tensordict import TensorDict
-from typing import Union
 
 from rl.networks import EmpiricalNormalization, MLP
 
@@ -18,16 +17,12 @@ class ActorBase(nn.Module):
         init_noise_std: float=1.0,
         state_dependent_std: bool=False,
         noise_std_type: str="scalar",
-        featurizer_latent_dim: Union[int, None] = None,
         **kwargs,
     ) -> None:
         super().__init__()
 
         self.output_dim = [2, num_actions] if state_dependent_std else num_actions
         self.actor_obs_normalization = actor_obs_normalization
-
-        if featurizer_latent_dim is not None:
-            self.featurizer_latent_dim = featurizer_latent_dim
 
         self.obs_groups = obs_groups["actor"]
         self._resolve_obs_groups(obs)
@@ -47,8 +42,6 @@ class ActorBase(nn.Module):
             num_actor_obs += obs[obs_group].shape[-1]
 
         self.num_actor_obs = num_actor_obs
-        if hasattr(self, "featurizer_latent_dim"):
-            self.num_actor_obs += self.featurizer_latent_dim
 
     def _init_noise_params(self, num_actions: int, init_noise_std: float, noise_std_type: str) -> None:
         torch.nn.init.zeros_(self.mlp[-2].weight[num_actions:])
@@ -84,10 +77,5 @@ class ActorBase(nn.Module):
 
     def forward(self, **kwargs) -> torch.Tensor:
         # TODO: add normalization
-        obs_terms = [kwargs[f"{obs_group}_obs"] for obs_group in self.obs_groups]
-        if hasattr(self, "featurizer_latent_dim"):
-            assert "latent" in kwargs, "ActorBase expects a latent input when featurizer_latent_dim is set."
-            obs_terms.append(kwargs["latent"])
-        obs = torch.cat(obs_terms, dim=-1)
+        obs = torch.cat([kwargs[f"{obs_group}_obs"] for obs_group in self.obs_groups], dim=-1)
         return self.mlp(obs)
-
