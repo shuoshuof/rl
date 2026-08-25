@@ -15,7 +15,7 @@ import rl.algorithms as rl_algorithms
 import rl.modules as rl_modules
 from rl.algorithms import PPO
 from rl.env import VecEnv
-from rl.modules import ActorCriticBase, resolve_rnd_config, resolve_symmetry_config
+from rl.modules import ActorCriticBase
 from rl.storage import RolloutStorage
 from rl.utils import resolve_obs_groups
 from rl.utils.logger import Logger
@@ -87,10 +87,8 @@ class OnPolicyRunner:
                     obs, rewards, dones = (obs.to(self.device), rewards.to(self.device), dones.to(self.device))
                     # Process the step
                     self.alg.process_env_step(obs, rewards, dones, extras)
-                    # Extract intrinsic rewards (only for logging)
-                    intrinsic_rewards = self.alg.intrinsic_rewards if self.alg_cfg["rnd_cfg"] else None
                     # Book keeping
-                    self.logger.process_env_step(rewards, dones, extras, intrinsic_rewards)
+                    self.logger.process_env_step(rewards, dones, extras)
 
                 stop = time.time()
                 collect_time = stop - start
@@ -116,7 +114,6 @@ class OnPolicyRunner:
                 loss_dict=loss_dict,
                 learning_rate=self.alg.learning_rate,
                 action_std=self.alg.policy.action_std,
-                rnd_weight=self.alg.rnd.weight if self.alg_cfg["rnd_cfg"] else None,
             )
 
             # Save model
@@ -135,11 +132,6 @@ class OnPolicyRunner:
             "iter": self.current_learning_iteration,
             "infos": infos,
         }
-        # Save RND model if used
-        if self.alg_cfg["rnd_cfg"]:
-            saved_dict["rnd_state_dict"] = self.alg.rnd.state_dict()
-            if self.alg.rnd_optimizer:
-                saved_dict["rnd_optimizer_state_dict"] = self.alg.rnd_optimizer.state_dict()
         # Save extra algorithm state (e.g. aux optimizers/schedulers)
         if hasattr(self.alg, 'state_dict'):
             for k, v in self.alg.state_dict().items():
@@ -154,16 +146,10 @@ class OnPolicyRunner:
         loaded_dict = torch.load(path, weights_only=False, map_location=map_location)
         # Load model
         resumed_training = self.alg.policy.load_state_dict(loaded_dict["model_state_dict"])
-        # Load RND model if used
-        if self.alg_cfg["rnd_cfg"]:
-            self.alg.rnd.load_state_dict(loaded_dict["rnd_state_dict"])
         # Load optimizer if used
         if load_optimizer and resumed_training:
             # Algorithm optimizer
             self.alg.optimizer.load_state_dict(loaded_dict["optimizer_state_dict"])
-            # RND optimizer if used
-            if self.alg_cfg["rnd_cfg"]:
-                self.alg.rnd_optimizer.load_state_dict(loaded_dict["rnd_optimizer_state_dict"])
             # Load auxiliary algorithm state (e.g. aux optimizers/schedulers)
             if hasattr(self.alg, 'load_state_dict'):
                 self.alg.load_state_dict(loaded_dict)
@@ -179,18 +165,10 @@ class OnPolicyRunner:
         return self.alg.policy.act_inference
 
     def train_mode(self) -> None:
-        # PPO
         self.alg.policy.train()
-        # RND
-        if self.alg_cfg["rnd_cfg"]:
-            self.alg.rnd.train()
 
     def eval_mode(self) -> None:
-        # PPO
         self.alg.policy.eval()
-        # RND
-        if self.alg_cfg["rnd_cfg"]:
-            self.alg.rnd.eval()
 
     def add_git_repo_to_log(self, repo_file_path: str) -> None:
         self.logger.git_status_repos.append(repo_file_path)
@@ -201,10 +179,7 @@ class OnPolicyRunner:
         .. note::
             See :func:`resolve_obs_groups` for more details on the handling of observation sets.
         """
-        required_sets = ["actor", "critic"]
-        if "rnd_cfg" in self.alg_cfg and self.alg_cfg["rnd_cfg"] is not None:
-            required_sets.append("rnd_state")
-        return required_sets
+        return ["actor", "critic"]
 
     def _configure_multi_gpu(self) -> None:
         """Configure multi-gpu training."""
@@ -252,12 +227,6 @@ class OnPolicyRunner:
 
     def _construct_algorithm(self, obs: TensorDict) -> PPO:
         """Construct the actor-critic algorithm."""
-        # Resolve RND config if used
-        self.alg_cfg = resolve_rnd_config(self.alg_cfg, obs, self.cfg["obs_groups"], self.env)
-
-        # Resolve symmetry config if used
-        self.alg_cfg = resolve_symmetry_config(self.alg_cfg, self.env)
-
         # Resolve deprecated normalization config
         if self.cfg.get("empirical_normalization") is not None:
             warnings.warn(

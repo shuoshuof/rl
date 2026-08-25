@@ -70,7 +70,6 @@ class VecEnv(ABC):
 
             - "actor": Specified observation groups are used as input to the actor network.
             - "critic": Specified observation groups are used as input to the critic network.
-            - "rnd_state": Specified observation groups are used as input to the RND network.
 
             Incomplete or incorrect configurations are handled in the `resolve_obs_groups()` function in
             `rl/utils/utils.py`.

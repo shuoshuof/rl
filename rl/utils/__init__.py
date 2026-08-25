@@ -10,7 +10,6 @@ from .utils import (
     resolve_nn_activation,
     resolve_obs_groups,
     resolve_optimizer,
-    string_to_callable,
 )
 
 __all__ = [
@@ -18,5 +17,4 @@ __all__ = [
     "resolve_nn_activation",
     "resolve_obs_groups",
     "resolve_optimizer",
-    "string_to_callable",
 ]

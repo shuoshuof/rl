@@ -5,11 +5,10 @@
 
 from __future__ import annotations
 
-import importlib
 import torch
 import warnings
 from tensordict import TensorDict
-from typing import Any, Callable
+from typing import Any
 
 
 def get_param(param: Any, idx: int) -> Any:
@@ -84,38 +83,6 @@ def resolve_optimizer(optimizer_name: str) -> torch.optim.Optimizer:
         return optimizer_dict[optimizer_name]
     else:
         raise ValueError(f"Invalid optimizer '{optimizer_name}'. Valid optimizers are: {list(optimizer_dict.keys())}")
-
-
-def string_to_callable(name: str) -> Callable:
-    """Resolve the module and function names to return the function.
-
-    Args:
-        name: Function name. The format should be 'module:attribute_name'.
-
-    Returns:
-        The function loaded from the module.
-
-    Raises:
-        ValueError: When the resolved attribute is not a function.
-        ValueError: When unable to resolve the attribute.
-    """
-    try:
-        mod_name, attr_name = name.split(":")
-        mod = importlib.import_module(mod_name)
-        callable_object = getattr(mod, attr_name)
-        # Check if attribute is callable
-        if callable(callable_object):
-            return callable_object
-        else:
-            raise ValueError(f"The imported object is not callable: '{name}'")
-    except AttributeError as err:
-        msg = (
-            "We could not interpret the entry as a callable object. The format of input should be"
-            f" 'module:attribute_name'\nWhile processing input '{name}'."
-        )
-        raise ValueError(msg) from err
-
-
 def resolve_obs_groups(
     obs: TensorDict, obs_groups: dict[str, list[str]], required_sets: list[str]
 ) -> dict[str, list[str]]:

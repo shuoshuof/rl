@@ -46,13 +46,6 @@ class Logger:
         self.cur_reward_sum = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
         self.cur_episode_length = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
 
-        # Create RND buffers
-        if self.cfg["algorithm"]["rnd_cfg"]:
-            self.erewbuffer = deque(maxlen=100)
-            self.irewbuffer = deque(maxlen=100)
-            self.cur_ereward_sum = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
-            self.cur_ireward_sum = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
-
         # Decide whether to disable logging
         # Note: We only log from the process with rank 0 (main process)
         self.disable_logs = is_distributed and gpu_global_rank != 0
@@ -72,7 +65,6 @@ class Logger:
         rewards: torch.Tensor,
         dones: torch.Tensor,
         extras: dict,
-        intrinsic_rewards: torch.Tensor | None = None,
     ) -> None:
         """Add metrics from the environment step to the buffers."""
         if self.log_dir is not None:
@@ -82,12 +74,7 @@ class Logger:
                 self.ep_extras.append(extras["log"])
 
             # Update rewards and episode length
-            if intrinsic_rewards is not None:
-                self.cur_ereward_sum += rewards
-                self.cur_ireward_sum += intrinsic_rewards
-                self.cur_reward_sum += rewards + intrinsic_rewards
-            else:
-                self.cur_reward_sum += rewards
+            self.cur_reward_sum += rewards
             self.cur_episode_length += 1
 
             # Clear data for completed episodes
@@ -96,11 +83,6 @@ class Logger:
             self.lenbuffer.extend(self.cur_episode_length[new_ids][:, 0].cpu().numpy().tolist())
             self.cur_reward_sum[new_ids] = 0
             self.cur_episode_length[new_ids] = 0
-            if intrinsic_rewards is not None:
-                self.erewbuffer.extend(self.cur_ereward_sum[new_ids][:, 0].cpu().numpy().tolist())
-                self.irewbuffer.extend(self.cur_ireward_sum[new_ids][:, 0].cpu().numpy().tolist())
-                self.cur_ereward_sum[new_ids] = 0
-                self.cur_ireward_sum[new_ids] = 0
 
     def log(
         self,
@@ -112,7 +94,6 @@ class Logger:
         loss_dict: dict,
         learning_rate: float,
         action_std: torch.Tensor,
-        rnd_weight: float | None,
         print_minimal: bool = False,
         width: int = 80,
         pad: int = 40,
@@ -164,10 +145,6 @@ class Logger:
 
             # Log rewards and episode length
             if len(self.rewbuffer) > 0:
-                if self.cfg["algorithm"]["rnd_cfg"]:
-                    self.writer.add_scalar("Rnd/mean_extrinsic_reward", statistics.mean(self.erewbuffer), it)
-                    self.writer.add_scalar("Rnd/mean_intrinsic_reward", statistics.mean(self.irewbuffer), it)
-                    self.writer.add_scalar("Rnd/weight", rnd_weight, it)
                 self.writer.add_scalar("Train/mean_reward", statistics.mean(self.rewbuffer), it)
                 self.writer.add_scalar("Train/mean_episode_length", statistics.mean(self.lenbuffer), it)
                 if self.logger_type != "wandb":
@@ -200,9 +177,6 @@ class Logger:
 
             # Print rewards and episode length
             if len(self.rewbuffer) > 0:
-                if self.cfg["algorithm"]["rnd_cfg"]:
-                    log_string += f"""{"Mean extrinsic reward:":>{pad}} {statistics.mean(self.erewbuffer):.2f}\n"""
-                    log_string += f"""{"Mean intrinsic reward:":>{pad}} {statistics.mean(self.irewbuffer):.2f}\n"""
                 log_string += f"""{"Mean reward:":>{pad}} {statistics.mean(self.rewbuffer):.2f}\n"""
                 log_string += f"""{"Mean episode length:":>{pad}} {statistics.mean(self.lenbuffer):.2f}\n"""
 
