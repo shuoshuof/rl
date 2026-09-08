@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 from torch.distributions import Normal
-from typing import Any, NoReturn
+from typing import NoReturn
 
 from .actor_base import ActorBase
 from .critic_base import CriticBase
@@ -17,27 +17,14 @@ class ActorCriticBase(nn.Module, ABC):
 
     def __init__(
         self,
-        obs: TensorDict,
-        obs_groups: dict[str, list[str]],
         num_actions: int,
-        actor_obs_normalization: bool = False,
-        critic_obs_normalization: bool = False,
         init_noise_std: float = 1.0,
         noise_std_type: str = "scalar",
         state_dependent_std: bool = False,
-        **kwargs: dict[str, Any],
     ) -> None:
         super().__init__()
-        if kwargs:
-            print("ActorCriticBase.__init__ received kwargs: " + str(kwargs))
-
-        self.obs_groups = obs_groups
         self.state_dependent_std = state_dependent_std
         self._init_noise_params(num_actions, init_noise_std, noise_std_type)
-
-        assert not (actor_obs_normalization or critic_obs_normalization), "Normalization not supported yet in ActorCriticBase"
-        self.actor_obs_normalization = actor_obs_normalization
-        self.critic_obs_normalization = critic_obs_normalization
 
     def _init_noise_params(
         self,
@@ -104,7 +91,7 @@ class ActorCriticBase(nn.Module, ABC):
         # Create distribution
         self.distribution = Normal(mean, std)
 
-    def act(self, obs: TensorDict, **kwargs: dict[str, Any]) -> torch.Tensor:
+    def act(self, obs: TensorDict) -> torch.Tensor:
         actor_obs = self.actor.resolve_obs(obs)
         self._update_distribution(actor_obs)
         return self.distribution.sample()
@@ -116,21 +103,16 @@ class ActorCriticBase(nn.Module, ABC):
         else:
             return self.actor(**actor_obs)
 
-    def evaluate(self, obs: TensorDict, **kwargs: dict[str, Any]) -> torch.Tensor:
+    def evaluate(self, obs: TensorDict) -> torch.Tensor:
         critic_obs = self.critic.resolve_obs(obs)
         return self.critic(**critic_obs)
-    
+
     def get_actions_log_prob(self, actions: torch.Tensor) -> torch.Tensor:
         return self.distribution.log_prob(actions).sum(dim=-1)
 
-    def update_normalization(self, *args, **kwargs) -> None:
-        # actor_obs = self.actor.resolve_obs(obs)
-        # self.actor.update_normalization(**actor_obs)
-        # critic_obs = self.critic.resolve_obs(obs)
-        # self.critic.update_normalization(**critic_obs)
-        if self.actor_obs_normalization or self.critic_obs_normalization:
-            raise NotImplementedError("Normalization update is not implemented")    
-        pass
+    def update_normalization(self, obs: TensorDict) -> None:
+        self.actor.update_normalization(obs)
+        self.critic.update_normalization(obs)
 
     def load_state_dict(self, state_dict: dict, strict: bool = True) -> bool:
         """Load the parameters of the actor-critic model.

@@ -17,7 +17,6 @@ from rl.algorithms import PPO
 from rl.env import VecEnv
 from rl.modules import ActorCriticBase
 from rl.storage import RolloutStorage
-from rl.utils import resolve_obs_groups
 from rl.utils.logger import Logger
 
 
@@ -36,7 +35,6 @@ class OnPolicyRunner:
 
         # Query observations from environment for algorithm construction
         obs = self.env.get_observations()
-        self.cfg["obs_groups"] = resolve_obs_groups(obs, self.cfg["obs_groups"], self._get_required_obs_sets())
 
         # Create the algorithm
         self.alg = self._construct_algorithm(obs)
@@ -173,14 +171,6 @@ class OnPolicyRunner:
     def add_git_repo_to_log(self, repo_file_path: str) -> None:
         self.logger.git_status_repos.append(repo_file_path)
 
-    def _get_required_obs_sets(self) -> list[str]:
-        """Get the observation sets required by PPO and its configured extensions.
-
-        .. note::
-            See :func:`resolve_obs_groups` for more details on the handling of observation sets.
-        """
-        return ["actor", "critic"]
-
     def _configure_multi_gpu(self) -> None:
         """Configure multi-gpu training."""
         # Check if distributed training is enabled
@@ -227,22 +217,16 @@ class OnPolicyRunner:
 
     def _construct_algorithm(self, obs: TensorDict) -> PPO:
         """Construct the actor-critic algorithm."""
-        # Resolve deprecated normalization config
-        if self.cfg.get("empirical_normalization") is not None:
-            warnings.warn(
-                "The `empirical_normalization` parameter is deprecated. Please set `actor_obs_normalization` and "
-                "`critic_obs_normalization` as part of the `policy` configuration instead.",
-                DeprecationWarning,
-            )
-            if self.policy_cfg.get("actor_obs_normalization") is None:
-                self.policy_cfg["actor_obs_normalization"] = self.cfg["empirical_normalization"]
-            if self.policy_cfg.get("critic_obs_normalization") is None:
-                self.policy_cfg["critic_obs_normalization"] = self.cfg["empirical_normalization"]
-
         # Initialize the policy
         actor_critic_class = getattr(rl_modules, self.policy_cfg.pop("class_name"))
+        actor_cfg = self.policy_cfg.pop("actor")
+        critic_cfg = self.policy_cfg.pop("critic")
         actor_critic: ActorCriticBase = actor_critic_class(
-            obs, self.cfg["obs_groups"], self.env.num_actions, **self.policy_cfg
+            obs=obs,
+            num_actions=self.env.num_actions,
+            actor_cfg=actor_cfg,
+            critic_cfg=critic_cfg,
+            **self.policy_cfg,
         ).to(self.device)
 
         # Initialize the storage

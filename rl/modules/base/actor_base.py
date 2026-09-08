@@ -11,23 +11,21 @@ class ActorBase(nn.Module):
     def __init__(
         self,
         obs: TensorDict,
-        obs_groups: dict[str, list[str]],
+        cfg: dict,
         num_actions: int,
-        actor_obs_normalization: bool,
         init_noise_std: float=1.0,
         state_dependent_std: bool=False,
         noise_std_type: str="scalar",
-        **kwargs,
     ) -> None:
         super().__init__()
 
         self.output_dim = [2, num_actions] if state_dependent_std else num_actions
-        self.actor_obs_normalization = actor_obs_normalization
 
-        self.obs_groups = obs_groups["actor"]
+        self.obs_groups = cfg["observation_groups"]
+        self.obs_group_names = [obs_group["group_name"] for obs_group in self.obs_groups]
         self._resolve_obs_groups(obs)
-        self._build_network(**kwargs)
-        self._build_normalizer()
+        self._build_network(cfg["network"])
+        self._build_normalizer(obs)
         if state_dependent_std:
             self._init_noise_params(num_actions, init_noise_std, noise_std_type)
 
@@ -37,9 +35,9 @@ class ActorBase(nn.Module):
         # pars obs groups to get input dim
         # Default behavior: 1D observations only
         num_actor_obs = 0
-        for obs_group in self.obs_groups:
-            assert len(obs[obs_group].shape) == 2, "The ActorBase module only supports 1D observations."
-            num_actor_obs += obs[obs_group].shape[-1]
+        for group_name in self.obs_group_names:
+            assert len(obs[group_name].shape) == 2, "The ActorBase module only supports 1D observations."
+            num_actor_obs += obs[group_name].shape[-1]
 
         self.num_actor_obs = num_actor_obs
 
@@ -52,30 +50,36 @@ class ActorBase(nn.Module):
         else:
             raise ValueError(f"Unknown standard deviation type: {noise_std_type}. Should be 'scalar' or 'log'")
 
-    def _build_network(self, actor_network, **kwargs) -> None:
-        mlp_cfg = actor_network.get("mlp", {})
+    def _build_network(self, network_cfg) -> None:
+        mlp_cfg = network_cfg["mlp"]
         self.mlp = MLP(
             input_dim=self.num_actor_obs,
-            **mlp_cfg,
             output_dim=self.output_dim,
+            **mlp_cfg,
         )
 
-    def _build_normalizer(self) -> None:
-        if self.actor_obs_normalization:
-            self.obs_normalizer = EmpiricalNormalization(self.num_actor_obs)
-        else:
-            self.obs_normalizer = nn.Identity()
+    def _build_normalizer(self, obs) -> None:
+        self.obs_normalizers = nn.ModuleDict()
+        for obs_group in self.obs_groups:
+            group_name = obs_group["group_name"]
+            if obs_group.get("normalize", False):
+                obs_shape = obs[group_name].shape[1:]
+                self.obs_normalizers[group_name] = EmpiricalNormalization(obs_shape)
+            else:
+                self.obs_normalizers[group_name] = nn.Identity()
 
-    def update_normalization(self, obs: torch.Tensor) -> None:
-        if self.actor_obs_normalization:
-            raise NotImplementedError("Actor observation normalization is not implemented")
-            self.obs_normalizer.update(obs)
+    def update_normalization(self, obs: TensorDict) -> None:
+        for group_name, normalizer in self.obs_normalizers.items():
+            if isinstance(normalizer, EmpiricalNormalization):
+                normalizer.update(obs[group_name])
 
     def resolve_obs(self, obs: TensorDict) -> dict:
-        obs_dict = {f"{obs_group}_obs": obs[obs_group] for obs_group in self.obs_groups}
+        obs_dict = {
+            f"{group_name}_obs": self.obs_normalizers[group_name](obs[group_name])
+            for group_name in self.obs_group_names
+        }
         return obs_dict
 
     def forward(self, **kwargs) -> torch.Tensor:
-        # TODO: add normalization
-        obs = torch.cat([kwargs[f"{obs_group}_obs"] for obs_group in self.obs_groups], dim=-1)
+        obs = torch.cat([kwargs[f"{group_name}_obs"] for group_name in self.obs_group_names], dim=-1)
         return self.mlp(obs)
