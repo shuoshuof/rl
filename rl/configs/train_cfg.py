@@ -3,7 +3,7 @@ from typing import Literal
 
 from isaaclab.utils import configclass
 
-from configs.network_cfg import NetworkCfg
+from rl.configs.network_cfg import NetworkCfg
 
 
 @configclass
