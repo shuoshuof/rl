@@ -123,6 +123,9 @@ class RslRlBaseRunnerCfg:
     device: str = "cuda:0"
     """The device for the rl-agent. Default is cuda:0."""
 
+    compile: bool = False
+    """Whether to compile the actor and critic forward passes with torch.compile."""
+
     num_steps_per_env: int = MISSING
     """The number of steps per environment per update."""
 

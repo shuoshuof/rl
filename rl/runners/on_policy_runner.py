@@ -229,6 +229,9 @@ class OnPolicyRunner:
             **self.policy_cfg,
         ).to(self.device)
 
+        if self.cfg.get("compile", False):
+            actor_critic.compile()
+
         # Initialize the storage
         storage = RolloutStorage(
             self.env.num_envs,

@@ -128,3 +128,7 @@ class ActorCriticBase(nn.Module, ABC):
         """
         super().load_state_dict(state_dict, strict=strict)
         return True
+
+    def compile(self, *args, **kwargs) -> None:
+        self.actor.compile(*args, **kwargs)
+        self.critic.compile(*args, **kwargs)

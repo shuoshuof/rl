@@ -30,4 +30,7 @@ class ActorCriticMLP(ActorCriticBase):
             init_noise_std=init_noise_std,
             noise_std_type=noise_std_type,
         )
-        self.critic = CriticBase(obs=obs, cfg=critic_cfg)
+        self.critic = CriticBase(
+            obs=obs,
+            cfg=critic_cfg
+        )
