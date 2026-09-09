@@ -108,9 +108,6 @@ class PPO:
     def process_env_step(
         self, obs: TensorDict, rewards: torch.Tensor, dones: torch.Tensor, extras: dict[str, torch.Tensor]
     ) -> None:
-        # Update the normalizers
-        self.policy.update_normalization(obs)
-
         # Record the rewards and dones
         # Note: We clone here because later on we bootstrap the rewards based on timeouts
         self.transition.rewards = rewards.clone()
@@ -265,15 +262,18 @@ class PPO:
             nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
             if self.use_amp and self.amp_dtype == torch.float16:
                 self.scaler.step(self.optimizer)
+                self.scaler.update()
             else:
                 self.optimizer.step()
-            if self.use_amp and self.amp_dtype == torch.float16:
-                self.scaler.update()
 
             # Store the losses
             mean_value_loss += value_loss.item()
             mean_surrogate_loss += surrogate_loss.item()
             mean_entropy += entropy_batch.mean().item()
+
+        # Update normalization after PPO optimization to keep statistics consistent with rollout.
+        obs = self.storage.observations.flatten(0, 1)
+        self.policy.update_normalization(obs)
 
         # Divide the losses by the number of updates
         num_updates = self.num_learning_epochs * self.num_mini_batches
