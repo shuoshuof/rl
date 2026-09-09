@@ -5,6 +5,7 @@
 
 # Copyright (c) 2020 Preferred Networks, Inc.
 
+
 from __future__ import annotations
 
 import torch
@@ -14,7 +15,7 @@ from torch import nn
 class EmpiricalNormalization(nn.Module):
     """Normalize mean and variance of values based on empirical values."""
 
-    def __init__(self, shape: int | tuple[int] | list[int], eps: float = 1e-2, until: int | None = None) -> None:
+    def __init__(self, shape: int | tuple[int, ...] | list[int], eps: float = 1e-2, until: int | None = None) -> None:
         """Initialize EmpiricalNormalization module.
 
         .. note:: The normalization parameters are computed over the whole batch, not for each environment separately.
@@ -34,10 +35,12 @@ class EmpiricalNormalization(nn.Module):
 
     @property
     def mean(self) -> torch.Tensor:
-        return self._mean.squeeze(0).clone()
+        """Return the current running mean."""
+        return self._mean.squeeze(0).clone()  # type: ignore
 
     @property
     def std(self) -> torch.Tensor:
+        """Return the current running standard deviation."""
         return self._std.squeeze(0).clone()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -52,11 +55,23 @@ class EmpiricalNormalization(nn.Module):
         if self.until is not None and self.count >= self.until:
             return
 
-        count_x = x.shape[0]
-        self.count += count_x
-        rate = count_x / self.count
+        count_x = torch.tensor(x.shape[0], dtype=self.count.dtype, device=self.count.device)  # type: ignore
         var_x = torch.var(x, dim=0, unbiased=False, keepdim=True)
         mean_x = torch.mean(x, dim=0, keepdim=True)
+
+        if torch.distributed.is_initialized():
+            # Compute the global mean first, then combine the local variances around that mean
+            local_mean_x = mean_x
+            torch.distributed.all_reduce(count_x)
+            mean_sum_x = mean_x * x.shape[0]
+            torch.distributed.all_reduce(mean_sum_x)
+            mean_x = mean_sum_x / count_x
+            var_sum_x = x.shape[0] * (var_x + (local_mean_x - mean_x).square())
+            torch.distributed.all_reduce(var_sum_x)
+            var_x = var_sum_x / count_x
+
+        self.count += count_x
+        rate = count_x / self.count
         delta_mean = mean_x - self._mean
         self._mean += rate * delta_mean
         self._var += rate * (var_x - self._var + delta_mean * (mean_x - self._mean))
