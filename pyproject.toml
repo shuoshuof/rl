@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "srl"
+version = "0.1.0"
+description = "Reinforcement learning algorithms and training utilities."
+requires-python = ">=3.10"
+dependencies = [
+    "GitPython",
+    "isaaclab",
+    "tensordict",
+    "tensorboard",
+    "torch>=2.3",
+]
+
+[project.optional-dependencies]
+wandb = ["wandb"]
+neptune = ["neptune"]
+all = [
+    "neptune",
+    "wandb",
+]
+
+[tool.setuptools.packages.find]
+include = ["srl*"]
