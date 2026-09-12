@@ -11,19 +11,19 @@ import torch.optim as optim
 from torch.amp import autocast, GradScaler
 from tensordict import TensorDict
 
-from rl.modules import ActorCriticBase
+from rl.modules import ActorCritic
 from rl.storage import RolloutStorage
 
 
 class PPO:
     """Proximal Policy Optimization algorithm (https://arxiv.org/abs/1707.06347)."""
 
-    policy: ActorCriticBase
+    policy: ActorCritic
     """The actor critic module."""
 
     def __init__(
         self,
-        policy: ActorCriticBase,
+        policy: ActorCritic,
         storage: RolloutStorage,
         num_learning_epochs: int = 5,
         num_mini_batches: int = 4,

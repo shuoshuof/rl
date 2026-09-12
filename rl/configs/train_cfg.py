@@ -21,8 +21,11 @@ class ObservationGroupCfg:
 class ModelCfg:
     """Configuration for one actor-critic model's inputs and complete network structure."""
 
+    class_name: str = MISSING
+    """Registered actor or critic implementation name."""
+
     observation_groups: list[ObservationGroupCfg] = MISSING
-    """Ordered observation groups concatenated as the model input."""
+    """Ordered observation groups consumed by the model; the implementation determines how to combine them."""
 
     network: NetworkCfg = MISSING
     """Complete network structure consumed by the configured model implementation."""
@@ -32,8 +35,8 @@ class ModelCfg:
 class RlPpoActorCriticCfg:
     """Configuration for the PPO actor-critic networks."""
 
-    class_name: str = "ActorCriticMLP"
-    """The actor-critic class name. Default is ActorCriticMLP."""
+    class_name: str = "ActorCritic"
+    """The actor-critic class name. Default is ActorCritic."""
 
     init_noise_std: float = MISSING
     """The initial noise standard deviation for the policy."""

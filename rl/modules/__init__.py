@@ -5,12 +5,14 @@
 
 """Definitions for neural-network components for RL-agents."""
 
-from .actor_critic_mlp import ActorCriticMLP
-from .base import ActorBase, ActorCriticBase, CriticBase
+from .actor import ActorBase, MLPActor
+from .critic import CriticBase, MLPCritic
+from .policy import ActorCritic
 
 __all__ = [
     "ActorBase",
-    "ActorCriticBase",
-    "ActorCriticMLP",
+    "ActorCritic",
     "CriticBase",
+    "MLPActor",
+    "MLPCritic",
 ]

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
+
 import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from rl.networks import EmpiricalNormalization, MLP
+from rl.networks import EmpiricalNormalization
 
 
-class CriticBase(nn.Module):
+class CriticBase(nn.Module, ABC):
+    """Observation handling and construction hooks for a critic returning [batch, 1] values."""
+
     def __init__(
         self,
         obs: TensorDict,
@@ -17,31 +21,23 @@ class CriticBase(nn.Module):
 
         self.obs_groups = cfg["observation_groups"]
         self.obs_group_names = [obs_group["group_name"] for obs_group in self.obs_groups]
+        self._build_normalizer(obs)
         self._resolve_obs_groups(obs)
         self._build_network(cfg["network"])
-        self._build_normalizer(obs)
 
         print(f"Critic: {self}")
 
+    @abstractmethod
     def _resolve_obs_groups(self, obs: TensorDict) -> None:
-        # pars obs groups to get input dim
-        # Default behavior: 1D observations only
-        num_critic_obs = 0
-        for group_name in self.obs_group_names:
-            assert len(obs[group_name].shape) == 2, "The CriticBase module only supports 1D observations."
-            num_critic_obs += obs[group_name].shape[-1]
+        """Resolve the observation shapes required by the concrete critic."""
+        raise NotImplementedError
 
-        self.num_critic_obs = num_critic_obs
+    @abstractmethod
+    def _build_network(self, network_cfg: dict) -> None:
+        """Create the critic network from its architecture-specific configuration."""
+        raise NotImplementedError
 
-    def _build_network(self, network_cfg) -> None:
-        mlp_cfg = network_cfg["mlp"]
-        self.mlp = MLP(
-            input_dim=self.num_critic_obs,
-            output_dim=1,
-            **mlp_cfg,
-        )
-
-    def _build_normalizer(self, obs) -> None:
+    def _build_normalizer(self, obs: TensorDict) -> None:
         self.obs_normalizers = nn.ModuleDict()
         for obs_group in self.obs_groups:
             group_name = obs_group["group_name"]
@@ -57,12 +53,11 @@ class CriticBase(nn.Module):
                 normalizer.update(obs[group_name])
 
     def resolve_obs(self, obs: TensorDict) -> dict:
-        obs_dict = {
+        return {
             f"{group_name}_obs": self.obs_normalizers[group_name](obs[group_name])
             for group_name in self.obs_group_names
         }
-        return obs_dict
 
-    def forward(self, **kwargs) -> torch.Tensor:
-        obs = torch.cat([kwargs[f"{group_name}_obs"] for group_name in self.obs_group_names], dim=-1)
-        return self.mlp(obs)
+    @abstractmethod
+    def forward(self, **kwargs: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError

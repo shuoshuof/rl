@@ -1,21 +1,29 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
+
 import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from rl.networks import EmpiricalNormalization, MLP
+from rl.networks import EmpiricalNormalization
 
 
-class ActorBase(nn.Module):
+class ActorBase(nn.Module, ABC):
+    """Observation handling and construction hooks for an actor.
+
+    Forward returns action means, or means and noise outputs with shape
+    [batch, 2, num_actions] when state-dependent standard deviation is enabled.
+    """
+
     def __init__(
         self,
         obs: TensorDict,
         cfg: dict,
         num_actions: int,
-        init_noise_std: float=1.0,
-        state_dependent_std: bool=False,
-        noise_std_type: str="scalar",
+        init_noise_std: float = 1.0,
+        state_dependent_std: bool = False,
+        noise_std_type: str = "scalar",
     ) -> None:
         super().__init__()
 
@@ -23,42 +31,29 @@ class ActorBase(nn.Module):
 
         self.obs_groups = cfg["observation_groups"]
         self.obs_group_names = [obs_group["group_name"] for obs_group in self.obs_groups]
+        self._build_normalizer(obs)
         self._resolve_obs_groups(obs)
         self._build_network(cfg["network"])
-        self._build_normalizer(obs)
         if state_dependent_std:
             self._init_noise_params(num_actions, init_noise_std, noise_std_type)
 
         print(f"Actor: {self}")
 
+    @abstractmethod
     def _resolve_obs_groups(self, obs: TensorDict) -> None:
-        # pars obs groups to get input dim
-        # Default behavior: 1D observations only
-        num_actor_obs = 0
-        for group_name in self.obs_group_names:
-            assert len(obs[group_name].shape) == 2, "The ActorBase module only supports 1D observations."
-            num_actor_obs += obs[group_name].shape[-1]
+        """Resolve the observation shapes required by the concrete actor."""
+        raise NotImplementedError
 
-        self.num_actor_obs = num_actor_obs
+    @abstractmethod
+    def _build_network(self, network_cfg: dict) -> None:
+        """Create the actor network from its architecture-specific configuration."""
+        raise NotImplementedError
 
     def _init_noise_params(self, num_actions: int, init_noise_std: float, noise_std_type: str) -> None:
-        torch.nn.init.zeros_(self.mlp[-2].weight[num_actions:])
-        if noise_std_type == "scalar":
-            torch.nn.init.constant_(self.mlp[-2].bias[num_actions:], init_noise_std)
-        elif noise_std_type == "log":
-            torch.nn.init.constant_(self.mlp[-2].bias[num_actions:], torch.log(torch.tensor(init_noise_std + 1e-7)))
-        else:
-            raise ValueError(f"Unknown standard deviation type: {noise_std_type}. Should be 'scalar' or 'log'")
+        """Override to initialize the actor's state-dependent noise outputs."""
+        raise NotImplementedError("Actors using state_dependent_std must implement _init_noise_params().")
 
-    def _build_network(self, network_cfg) -> None:
-        mlp_cfg = network_cfg["mlp"]
-        self.mlp = MLP(
-            input_dim=self.num_actor_obs,
-            output_dim=self.output_dim,
-            **mlp_cfg,
-        )
-
-    def _build_normalizer(self, obs) -> None:
+    def _build_normalizer(self, obs: TensorDict) -> None:
         self.obs_normalizers = nn.ModuleDict()
         for obs_group in self.obs_groups:
             group_name = obs_group["group_name"]
@@ -74,12 +69,11 @@ class ActorBase(nn.Module):
                 normalizer.update(obs[group_name])
 
     def resolve_obs(self, obs: TensorDict) -> dict:
-        obs_dict = {
+        return {
             f"{group_name}_obs": self.obs_normalizers[group_name](obs[group_name])
             for group_name in self.obs_group_names
         }
-        return obs_dict
 
-    def forward(self, **kwargs) -> torch.Tensor:
-        obs = torch.cat([kwargs[f"{group_name}_obs"] for group_name in self.obs_group_names], dim=-1)
-        return self.mlp(obs)
+    @abstractmethod
+    def forward(self, **kwargs: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError

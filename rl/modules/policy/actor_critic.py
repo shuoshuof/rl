@@ -1,5 +1,4 @@
 from __future__ import annotations
-from abc import ABC
 
 import torch
 import torch.nn as nn
@@ -7,17 +6,24 @@ from tensordict import TensorDict
 from torch.distributions import Normal
 from typing import NoReturn
 
-from .actor_base import ActorBase
-from .critic_base import CriticBase
+from rl.registry import ACTORS, CRITICS
+
+from ..actor.actor import ActorBase
+from ..critic.critic import CriticBase
 
 
-class ActorCriticBase(nn.Module, ABC):
+class ActorCritic(nn.Module):
+    """Compose independently registered actors and critics for on-policy training."""
+
     actor: ActorBase
     critic: CriticBase
 
     def __init__(
         self,
+        obs: TensorDict,
         num_actions: int,
+        actor_cfg: dict,
+        critic_cfg: dict,
         init_noise_std: float = 1.0,
         noise_std_type: str = "scalar",
         state_dependent_std: bool = False,
@@ -25,6 +31,21 @@ class ActorCriticBase(nn.Module, ABC):
         super().__init__()
         self.state_dependent_std = state_dependent_std
         self._init_noise_params(num_actions, init_noise_std, noise_std_type)
+
+        actor_class = ACTORS.get(actor_cfg["class_name"])
+        critic_class = CRITICS.get(critic_cfg["class_name"])
+        self.actor = actor_class(
+            obs=obs,
+            cfg=actor_cfg,
+            num_actions=num_actions,
+            init_noise_std=init_noise_std,
+            noise_std_type=noise_std_type,
+            state_dependent_std=state_dependent_std,
+        )
+        self.critic = critic_class(
+            obs=obs,
+            cfg=critic_cfg,
+        )
 
     def _init_noise_params(
         self,

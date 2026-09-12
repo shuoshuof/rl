@@ -15,7 +15,7 @@ import rl.algorithms as rl_algorithms
 import rl.modules as rl_modules
 from rl.algorithms import PPO
 from rl.env import VecEnv
-from rl.modules import ActorCriticBase
+from rl.modules import ActorCritic
 from rl.storage import RolloutStorage
 from rl.utils.logger import Logger
 
@@ -221,7 +221,7 @@ class OnPolicyRunner:
         actor_critic_class = getattr(rl_modules, self.policy_cfg.pop("class_name"))
         actor_cfg = self.policy_cfg.pop("actor")
         critic_cfg = self.policy_cfg.pop("critic")
-        actor_critic: ActorCriticBase = actor_critic_class(
+        actor_critic: ActorCritic = actor_critic_class(
             obs=obs,
             num_actions=self.env.num_actions,
             actor_cfg=actor_cfg,
