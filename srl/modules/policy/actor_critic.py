@@ -7,7 +7,7 @@ from torch.distributions import Normal
 from torch.nn.parameter import UninitializedParameter
 from typing import NoReturn
 
-from rl.registry import ACTORS, CRITICS
+from srl.registry import ACTORS, CRITICS
 
 from ..actor.actor import ActorBase
 from ..critic.critic import CriticBase

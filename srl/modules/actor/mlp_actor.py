@@ -3,8 +3,8 @@ from __future__ import annotations
 import torch
 from tensordict import TensorDict
 
-from rl.networks import MLP
-from rl.registry import ACTORS
+from srl.networks import MLP
+from srl.registry import ACTORS
 
 from .actor import ActorBase
 

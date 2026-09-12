@@ -11,8 +11,8 @@ import torch.optim as optim
 from torch.amp import autocast, GradScaler
 from tensordict import TensorDict
 
-from rl.modules import ActorCritic
-from rl.storage import RolloutStorage
+from srl.modules import ActorCritic
+from srl.storage import RolloutStorage
 
 
 class PPO:

@@ -11,13 +11,13 @@ import torch
 import warnings
 from tensordict import TensorDict
 
-import rl.algorithms as rl_algorithms
-import rl.modules as rl_modules
-from rl.algorithms import PPO
-from rl.env import VecEnv
-from rl.modules import ActorCritic
-from rl.storage import RolloutStorage
-from rl.utils.logger import Logger
+import srl.algorithms as rl_algorithms
+import srl.modules as rl_modules
+from srl.algorithms import PPO
+from srl.env import VecEnv
+from srl.modules import ActorCritic
+from srl.storage import RolloutStorage
+from srl.utils.logger import Logger
 
 
 class OnPolicyRunner:

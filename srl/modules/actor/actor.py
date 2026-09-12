@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from rl.networks import EmpiricalNormalization
+from srl.networks import EmpiricalNormalization
 
 
 class ActorBase(nn.Module, ABC):

@@ -9,7 +9,7 @@ import math
 import torch
 from torch import nn as nn
 
-from rl.utils import get_param, resolve_nn_activation
+from srl.utils import get_param, resolve_nn_activation
 
 
 class CNN(nn.Sequential):

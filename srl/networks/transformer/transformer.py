@@ -4,7 +4,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
-from rl.utils import resolve_nn_activation
+from srl.utils import resolve_nn_activation
 
 
 

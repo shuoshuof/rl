@@ -4,8 +4,8 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
-from rl.networks.transformer.transformer import FeedForward
-from rl.utils import resolve_nn_activation
+from srl.networks.transformer.transformer import FeedForward
+from srl.utils import resolve_nn_activation
 
 
 
