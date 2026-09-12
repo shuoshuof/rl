@@ -14,15 +14,11 @@ class MLPActor(ActorBase):
     """Actor that concatenates vector observation groups and applies an MLP."""
 
     def _resolve_obs_groups(self, obs: TensorDict) -> None:
-        num_actor_obs = 0
         for group_name in self.obs_group_names:
             assert len(obs[group_name].shape) == 2, "MLPActor only supports 1D observations."
-            num_actor_obs += obs[group_name].shape[-1]
-        self.num_actor_obs = num_actor_obs
 
     def _build_network(self, network_cfg: dict) -> None:
         self.mlp = MLP(
-            input_dim=self.num_actor_obs,
             output_dim=self.output_dim,
             **network_cfg["mlp"],
         )

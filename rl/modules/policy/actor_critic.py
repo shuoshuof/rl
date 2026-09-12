@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 from torch.distributions import Normal
+from torch.nn.parameter import UninitializedParameter
 from typing import NoReturn
 
 from rl.registry import ACTORS, CRITICS
@@ -13,7 +14,7 @@ from ..critic.critic import CriticBase
 
 
 class ActorCritic(nn.Module):
-    """Compose independently registered actors and critics for on-policy training."""
+    """Compose actors and critics and materialize lazy parameters on their construction device."""
 
     actor: ActorBase
     critic: CriticBase
@@ -46,6 +47,29 @@ class ActorCritic(nn.Module):
             obs=obs,
             cfg=critic_cfg,
         )
+        self._materialize_lazy_parameters(obs)
+
+    @torch.no_grad()
+    def _materialize_lazy_parameters(self, obs: TensorDict) -> None:
+        """Materialize lazy parameters on the model's device before compilation and optimizer creation.
+
+        The sample must exercise every lazy branch. Evaluation mode avoids updating normalization statistics
+        or applying dropout, and each module's original training mode is restored afterwards.
+        """
+        device = next(self.parameters()).device
+        sample_obs = obs[:1].to(device)
+        training_modes = [(module, module.training) for module in self.modules()]
+        try:
+            self.eval()
+            self.actor(**self.actor.resolve_obs(sample_obs))
+            self.critic(**self.critic.resolve_obs(sample_obs))
+        finally:
+            for module, training in training_modes:
+                module.training = training
+
+        uninitialized = [name for name, param in self.named_parameters() if isinstance(param, UninitializedParameter)]
+        if uninitialized:
+            raise RuntimeError(f"Lazy parameters were not reached during materialization: {', '.join(uninitialized)}")
 
     def _init_noise_params(
         self,
