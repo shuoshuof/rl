@@ -4,5 +4,5 @@ from .train_cfg import (
     ObservationGroupCfg,
     RlPpoActorCriticCfg,
     RlPpoAlgorithmCfg,
-    RslRlOnPolicyRunnerCfg,
+    RlOnPolicyRunnerCfg,
 )
