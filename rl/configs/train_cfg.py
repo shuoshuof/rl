@@ -117,7 +117,7 @@ class RlPpoAlgorithmCfg:
 
 
 @configclass
-class RslRlBaseRunnerCfg:
+class BaseRunnerCfg:
     """Base configuration of the runner."""
 
     seed: int = 42
@@ -182,7 +182,7 @@ class RslRlBaseRunnerCfg:
 
 
 @configclass
-class RslRlOnPolicyRunnerCfg(RslRlBaseRunnerCfg):
+class RlOnPolicyRunnerCfg(BaseRunnerCfg):
     """Configuration of the runner for on-policy algorithms."""
 
     class_name: str = "OnPolicyRunner"
