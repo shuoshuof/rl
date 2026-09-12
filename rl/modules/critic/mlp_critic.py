@@ -25,4 +25,4 @@ class MLPCritic(CriticBase):
 
     def forward(self, **kwargs: torch.Tensor) -> torch.Tensor:
         obs = torch.cat([kwargs[f"{group_name}_obs"] for group_name in self.obs_group_names], dim=-1)
-        return self.mlp(obs
+        return self.mlp(obs)

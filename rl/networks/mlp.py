@@ -99,4 +99,4 @@ class MLP(nn.Sequential):
         """Forward pass of the MLP."""
         for layer in self:
             x = layer(x)
-        return 
+        return x
