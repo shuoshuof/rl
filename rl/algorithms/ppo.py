@@ -156,45 +156,36 @@ class PPO:
         generator = self.storage.mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
 
         # Iterate over batches
-        for (
-            obs_batch,
-            actions_batch,
-            target_values_batch,
-            advantages_batch,
-            returns_batch,
-            old_actions_log_prob_batch,
-            old_mu_batch,
-            old_sigma_batch,
-        ) in generator:
+        for batch in generator:
             # Check if we should normalize advantages per mini batch
             if self.normalize_advantage_per_mini_batch:
                 with torch.no_grad():
-                    advantages_batch = (advantages_batch - advantages_batch.mean()) / (advantages_batch.std() + 1e-8)
+                    batch.advantages = (batch.advantages - batch.advantages.mean()) / (batch.advantages.std() + 1e-8)
 
             with autocast(enabled=self.use_amp, dtype=self.amp_dtype, device_type=self.device_type):
                 # Recompute actions log prob and entropy for current batch of transitions
                 # Note: We need to do this because we updated the policy with the new parameters
-                self.policy.act(obs_batch)
-                actions_log_prob_batch = self.policy.get_actions_log_prob(actions_batch)
-                value_batch = self.policy.evaluate(obs_batch)
-                mu_batch = self.policy.action_mean
-                sigma_batch = self.policy.action_std
-                entropy_batch = self.policy.entropy
+                self.policy.act(batch.observations)
+                actions_log_prob = self.policy.get_actions_log_prob(batch.actions)
+                values = self.policy.evaluate(batch.observations)
+                mu = self.policy.action_mean
+                sigma = self.policy.action_std
+                entropy = self.policy.entropy
 
             # Keep numerically sensitive terms in FP32
-            actions_log_prob_batch = actions_log_prob_batch.float()
-            value_batch = value_batch.float()
-            mu_batch = mu_batch.float()
-            sigma_batch = sigma_batch.float()
-            entropy_batch = entropy_batch.float()
+            actions_log_prob = actions_log_prob.float()
+            values = values.float()
+            mu = mu.float()
+            sigma = sigma.float()
+            entropy = entropy.float()
 
             # Compute KL divergence and adapt the learning rate
             if self.desired_kl is not None and self.schedule == "adaptive":
                 with torch.inference_mode():
                     kl = torch.sum(
-                        torch.log(sigma_batch / old_sigma_batch + 1.0e-5)
-                        + (torch.square(old_sigma_batch) + torch.square(old_mu_batch - mu_batch))
-                        / (2.0 * torch.square(sigma_batch))
+                        torch.log(sigma / batch.old_sigma + 1.0e-5)
+                        + (torch.square(batch.old_sigma) + torch.square(batch.old_mu - mu))
+                        / (2.0 * torch.square(sigma))
                         - 0.5,
                         axis=-1,
                     )
@@ -225,25 +216,25 @@ class PPO:
                         param_group["lr"] = self.learning_rate
 
             # Surrogate loss
-            ratio = torch.exp(actions_log_prob_batch - torch.squeeze(old_actions_log_prob_batch))
-            surrogate = -torch.squeeze(advantages_batch) * ratio
-            surrogate_clipped = -torch.squeeze(advantages_batch) * torch.clamp(
+            ratio = torch.exp(actions_log_prob - torch.squeeze(batch.old_actions_log_prob))
+            surrogate = -torch.squeeze(batch.advantages) * ratio
+            surrogate_clipped = -torch.squeeze(batch.advantages) * torch.clamp(
                 ratio, 1.0 - self.clip_param, 1.0 + self.clip_param
             )
             surrogate_loss = torch.max(surrogate, surrogate_clipped).mean()
 
             # Value function loss
             if self.use_clipped_value_loss:
-                value_clipped = target_values_batch + (value_batch - target_values_batch).clamp(
+                value_clipped = batch.values + (values - batch.values).clamp(
                     -self.clip_param, self.clip_param
                 )
-                value_losses = (value_batch - returns_batch).pow(2)
-                value_losses_clipped = (value_clipped - returns_batch).pow(2)
+                value_losses = (values - batch.returns).pow(2)
+                value_losses_clipped = (value_clipped - batch.returns).pow(2)
                 value_loss = torch.max(value_losses, value_losses_clipped).mean()
             else:
-                value_loss = (returns_batch - value_batch).pow(2).mean()
+                value_loss = (batch.returns - values).pow(2).mean()
 
-            loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
+            loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy.mean()
 
             # Compute the gradients for PPO
             self.optimizer.zero_grad()
@@ -269,7 +260,7 @@ class PPO:
             # Store the losses
             mean_value_loss += value_loss.item()
             mean_surrogate_loss += surrogate_loss.item()
-            mean_entropy += entropy_batch.mean().item()
+            mean_entropy += entropy.mean().item()
 
         # Update normalization after PPO optimization to keep statistics consistent with rollout.
         obs = self.storage.observations.flatten(0, 1)

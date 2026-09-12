@@ -29,6 +29,45 @@ class RolloutStorage:
         def clear(self) -> None:
             self.__init__()
 
+    class Batch:
+        """A mini-batch of rollout data for feedforward PPO updates."""
+
+        def __init__(
+            self,
+            observations: TensorDict,
+            actions: torch.Tensor,
+            values: torch.Tensor,
+            advantages: torch.Tensor,
+            returns: torch.Tensor,
+            old_actions_log_prob: torch.Tensor,
+            old_mu: torch.Tensor,
+            old_sigma: torch.Tensor,
+        ) -> None:
+            """Initialize a batch container over rollout data."""
+            self.observations: TensorDict = observations
+            """Batch of observations."""
+
+            self.actions: torch.Tensor = actions
+            """Batch of actions."""
+
+            self.values: torch.Tensor = values
+            """Batch of value estimates recorded during rollout."""
+
+            self.advantages: torch.Tensor = advantages
+            """Batch of advantage estimates."""
+
+            self.returns: torch.Tensor = returns
+            """Batch of return targets."""
+
+            self.old_actions_log_prob: torch.Tensor = old_actions_log_prob
+            """Batch of action log probabilities under the rollout policy."""
+
+            self.old_mu: torch.Tensor = old_mu
+            """Batch of means of the rollout action distribution."""
+
+            self.old_sigma: torch.Tensor = old_sigma
+            """Batch of standard deviations of the rollout action distribution."""
+
     def __init__(
         self,
         num_envs: int,
@@ -76,7 +115,7 @@ class RolloutStorage:
     def clear(self) -> None:
         self.step = 0
 
-    def mini_batch_generator(self, num_mini_batches: int, num_epochs: int = 8) -> Generator:
+    def mini_batch_generator(self, num_mini_batches: int, num_epochs: int = 8) -> Generator[Batch, None, None]:
         batch_size = self.num_envs * self.num_transitions_per_env
         mini_batch_size = batch_size // num_mini_batches
         indices = torch.randperm(num_mini_batches * mini_batch_size, requires_grad=False, device=self.device)
@@ -96,13 +135,14 @@ class RolloutStorage:
                 stop = (i + 1) * mini_batch_size
                 batch_idx = indices[start:stop]
 
-                yield (
-                    observations[batch_idx],
-                    actions[batch_idx],
-                    values[batch_idx],
-                    advantages[batch_idx],
-                    returns[batch_idx],
-                    old_actions_log_prob[batch_idx],
-                    old_mu[batch_idx],
-                    old_sigma[batch_idx],
+                # Yield the mini-batch
+                yield RolloutStorage.Batch(
+                    observations=observations[batch_idx],  # type: ignore
+                    actions=actions[batch_idx],
+                    values=values[batch_idx],
+                    advantages=advantages[batch_idx],
+                    returns=returns[batch_idx],
+                    old_actions_log_prob=old_actions_log_prob[batch_idx],
+                    old_mu=old_mu[batch_idx],
+                    old_sigma=old_sigma[batch_idx],
                 )
